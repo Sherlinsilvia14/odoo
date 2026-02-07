@@ -15,6 +15,29 @@ const Customers = () => {
         if (res.ok) setUsers(await res.json());
     };
 
+    const handleUpdateCredits = async (id, amount) => {
+        try {
+            const res = await fetch(`/api/users/${id}/credits`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ amount: parseInt(amount) })
+            });
+            if (res.ok) {
+                fetchUsers();
+                // Optionally update userDetails if it's currently showing
+                const updatedUser = await res.json();
+                if (expandedUser === id) {
+                    // Update the credits in the local state for immediate feedback
+                    setUsers(prev => prev.map(u => u._id === id ? updatedUser : u));
+                }
+            } else {
+                alert('Failed to update credits');
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
     const fetchDetails = async (id) => {
         if (expandedUser === id) {
             setExpandedUser(null);
@@ -61,6 +84,7 @@ const Customers = () => {
                             <th className="p-3 text-left">Name</th>
                             <th className="p-3 text-left">Email</th>
                             <th className="p-3 text-left">Phone</th>
+                            <th className="p-3 text-left">Credits</th>
                             <th className="p-3 text-left">Joined</th>
                             <th className="p-3"></th>
                         </tr>
@@ -72,6 +96,9 @@ const Customers = () => {
                                     <td className="p-3 font-medium">{u.name}</td>
                                     <td className="p-3">{u.email}</td>
                                     <td className="p-3">{u.phone}</td>
+                                    <td className="p-3">
+                                        <span style={{ fontWeight: 600, color: 'var(--primary-dark)' }}>{u.totalCredits || 0}</span>
+                                    </td>
                                     <td className="p-3">{new Date(u.createdAt).toLocaleDateString()}</td>
                                     <td className="p-3 text-right">
                                         {expandedUser === u._id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -106,6 +133,28 @@ const Customers = () => {
                                                                     </li>
                                                                 ))}
                                                             </ul>
+                                                        )}
+                                                    </div>
+                                                    <div style={{ background: 'white', padding: '1rem', borderRadius: '8px', border: '1px solid #eee' }}>
+                                                        <h4 style={{ fontWeight: 'bold', marginBottom: '0.5rem', borderBottom: '1px solid #eee', paddingBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                                                            <span>Credit Management</span>
+                                                            <span style={{ color: 'var(--primary-dark)' }}>Total: {u.totalCredits || 0}</span>
+                                                        </h4>
+                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                            <button className="btn btn-gold" style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }} onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const amount = prompt('Enter points to add (or negative to deduct):');
+                                                                if (amount && !isNaN(amount)) {
+                                                                    handleUpdateCredits(u._id, amount);
+                                                                }
+                                                            }}>
+                                                                Adjust Credits
+                                                            </button>
+                                                        </div>
+                                                        {u.totalCredits >= 30 && (
+                                                            <div style={{ marginTop: '0.8rem', padding: '0.5rem', background: '#dcfce7', color: '#166534', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>
+                                                                Eligible for Free Service
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </div>

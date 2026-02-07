@@ -102,9 +102,10 @@ const Dashboard = () => {
                                     <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Total Paid</h3>
                                     <div style={{ fontSize: '2rem', fontWeight: 600 }}>₹{userStats?.totalPaid || 0}</div>
                                 </div>
-                                <div className="card">
-                                    <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Expiring Soon</h3>
-                                    <div style={{ fontSize: '2rem', fontWeight: 600, color: '#f59e0b' }}>{userStats?.upcomingExpiry || 0}</div>
+                                <div className="card" style={{ borderLeft: '4px solid var(--primary)' }}>
+                                    <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>My Credits</h3>
+                                    <div style={{ fontSize: '2rem', fontWeight: 600, color: 'var(--primary-dark)' }}>{userStats?.totalCredits || 0}</div>
+                                    {userStats?.totalCredits >= 30 && <div style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 'bold' }}>Free Service Earned!</div>}
                                 </div>
                             </div>
                         </div>
@@ -145,6 +146,10 @@ const Dashboard = () => {
                                 <div className="card">
                                     <h3 style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem', textTransform: 'uppercase' }}>New Customers (Today)</h3>
                                     <div style={{ fontSize: '1.8rem', fontWeight: 700 }}>{userStats?.newCustomersToday || 0}</div>
+                                </div>
+                                <div className="card" style={{ borderLeft: '4px solid var(--primary)' }}>
+                                    <h3 style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Total Credits Issued</h3>
+                                    <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--primary-dark)' }}>{userStats?.totalCreditsIssued || 0}</div>
                                 </div>
                             </div>
 
@@ -267,8 +272,14 @@ const Dashboard = () => {
             {/* Main Content */}
             <div className="main-content">
                 <div className="content-panel">
-                    <header style={{ marginBottom: '2rem' }}>
-                        <h2 style={{ fontFamily: 'Playfair Display', fontSize: '2rem', margin: 0 }}>{activeTab}</h2>
+                    <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '1rem' }}>
+                        <div>
+                            <div style={{ fontFamily: 'Playfair Display', fontSize: '1.2rem', color: 'var(--primary-dark)', fontWeight: 'bold' }}>Urban<span style={{ color: 'var(--primary)' }}>Glow</span></div>
+                            <h2 style={{ fontFamily: 'Playfair Display', fontSize: '2rem', margin: 0 }}>{activeTab}</h2>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '0.8rem', color: '#666' }}>{new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                        </div>
                     </header>
                     {renderContent()}
                 </div>

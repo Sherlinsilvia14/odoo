@@ -33,6 +33,15 @@ const UserProfile = ({ user }) => {
                     <label className="text-xs text-gray-500 uppercase font-semibold">Member Since</label>
                     <div className="text-lg">{new Date(profile.createdAt || Date.now()).toLocaleDateString()}</div>
                 </div>
+                <div className="p-4 rounded-lg" style={{ background: 'var(--primary-dark)', color: 'white' }}>
+                    <label className="text-xs uppercase font-semibold" style={{ opacity: 0.8 }}>My Reward Credits</label>
+                    <div className="text-2xl font-bold">{profile.totalCredits || 0} Points</div>
+                    {profile.totalCredits >= 30 && (
+                        <div style={{ fontSize: '0.8rem', marginTop: '0.5rem', background: 'rgba(255,255,255,0.2)', padding: '0.4rem', borderRadius: '4px' }}>
+                            🎉 You have 1 Free Service waiting for you!
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

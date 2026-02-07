@@ -13,7 +13,9 @@ const UserSchema = new mongoose.Schema({
     resetPasswordToken: String,
     resetPasswordExpires: Date,
     balance: { type: Number, default: 0 },
-    membershipDiscount: { type: Number, default: 0 } // Percentage
+    membershipDiscount: { type: Number, default: 0 }, // Percentage
+    totalCredits: { type: Number, default: 0 },
+    isFirstTimeUser: { type: Boolean, default: true }
 }, { timestamps: true });
 
 export default mongoose.model('User', UserSchema);

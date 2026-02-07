@@ -36,6 +36,14 @@ const Reports = () => {
                     <h3>Global Plan Balance</h3>
                     <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#10b981' }}>₹{data.totalRemainingBalance || 0}</div>
                 </div>
+                <div className="card text-center" style={{ borderLeft: '4px solid var(--primary)' }}>
+                    <h3>Credits Issued</h3>
+                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--primary-dark)' }}>{data.totalCreditsIssued || 0}</div>
+                </div>
+                <div className="card text-center" style={{ borderLeft: '4px solid var(--primary-dark)' }}>
+                    <h3>Membership Fees</h3>
+                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--primary-dark)' }}>₹{data.totalMembershipFees || 0}</div>
+                </div>
             </div>
         </div>
     );

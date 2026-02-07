@@ -262,6 +262,20 @@ app.get('/api/users/:id/details', async (req, res) => {
     }
 });
 
+app.put('/api/users/:id/credits', async (req, res) => {
+    try {
+        const { amount } = req.body;
+        const user = await User.findById(req.params.id);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        user.totalCredits = (user.totalCredits || 0) + Number(amount);
+        await user.save();
+        res.json(user);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // --- Services ---
 app.get('/api/services', async (req, res) => {
     const services = await Service.find().sort({ createdAt: -1 });
@@ -328,13 +342,35 @@ app.get('/api/subscriptions', async (req, res) => {
 app.post('/api/subscriptions', async (req, res) => {
     try {
         const subData = req.body;
-        // Simple generation of Subscription Number
         subData.subscriptionNumber = 'SUB-' + Date.now().toString().slice(-6);
+
+        // 1. Calculate Credits Earned
+        const plan = await Plan.findById(subData.plan);
+        if (plan) {
+            let credits = 0;
+            switch (plan.billingInterval) {
+                case 'Monthly': credits = 5; break;
+                case 'Quarterly': credits = 10; break;
+                case 'Half-Yearly': credits = 15; break;
+                case 'Yearly': credits = 10; break;
+                default: credits = 0;
+            }
+            subData.creditsEarned = credits;
+        }
+
+        // 2. Add Membership Fee for First-Time Users
+        const user = await User.findById(subData.customer);
+        if (user && user.isFirstTimeUser) {
+            subData.membershipFee = 50;
+            subData.totalAmount = (subData.totalAmount || 0) + 50;
+        }
+
         const sub = new Subscription(subData);
         await sub.save();
         res.json(sub);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
 app.put('/api/subscriptions/:id', async (req, res) => {
     const sub = await Subscription.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.json(sub);
@@ -349,18 +385,38 @@ app.put('/api/subscriptions/:id/confirm', async (req, res) => {
         sub.status = 'Active';
         await sub.save();
 
+        // Update User Credits and First-Time Status
+        const user = await User.findById(sub.customer);
+        if (user) {
+            user.totalCredits = (user.totalCredits || 0) + (sub.creditsEarned || 0);
+            user.isFirstTimeUser = false;
+            await user.save();
+        }
+
         // Auto-generate Invoice
+        const invoiceItems = sub.items.map(item => ({
+            description: item.name || 'Product',
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            amount: item.amount
+        }));
+
+        // Add Membership Fee as an item in the invoice if applicable
+        if (sub.membershipFee > 0) {
+            invoiceItems.push({
+                description: 'First-time Membership Card Fee',
+                quantity: 1,
+                unitPrice: 50,
+                amount: 50
+            });
+        }
+
         const invoice = new Invoice({
             invoiceNumber: 'INV-' + Date.now().toString().slice(-6),
             subscription: sub._id,
             customer: sub.customer,
-            items: sub.items.map(item => ({
-                description: item.name || 'Product',
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                amount: item.amount
-            })),
-            subtotal: sub.serviceCost || sub.subtotal,
+            items: invoiceItems,
+            subtotal: (sub.serviceCost || sub.subtotal) + (sub.membershipFee || 0),
             taxTotal: sub.taxTotal || 0,
             discountTotal: sub.discountTotal || 0,
             remainingBalance: sub.remainingBalance || 0,
@@ -506,6 +562,7 @@ app.get('/api/reports', async (req, res) => {
 
         if (customerId) {
             // User Level Reports
+            const user = await User.findById(customerId);
             const activeSubs = await Subscription.countDocuments({ customer: customerId, status: 'Active' });
             const userPayments = await Payment.find({ customer: customerId });
             const totalPaid = userPayments.reduce((acc, curr) => acc + curr.amount, 0);
@@ -518,7 +575,13 @@ app.get('/api/reports', async (req, res) => {
                 endDate: { $lte: thirtyDaysFromNow }
             });
 
-            return res.json({ activeSubs, totalPaid, upcomingExpiry });
+            return res.json({
+                activeSubs,
+                totalPaid,
+                upcomingExpiry,
+                totalCredits: user?.totalCredits || 0,
+                isFirstTimeUser: user?.isFirstTimeUser ?? true
+            });
         }
 
         // Admin & Internal Reports
@@ -529,7 +592,7 @@ app.get('/api/reports', async (req, res) => {
 
         const totalCustomers = await User.countDocuments({ role: 'Customer' });
         const newCustomersToday = await User.countDocuments({ role: 'Customer', createdAt: { $gte: today } });
-        const activeSubs = await Subscription.countDocuments({ status: 'Active' });
+        const activeSubsCount = await Subscription.countDocuments({ status: 'Active' });
         const totalPlans = await Plan.countDocuments();
         const pendingPayments = await Invoice.countDocuments({ status: 'Draft' });
 
@@ -545,13 +608,15 @@ app.get('/api/reports', async (req, res) => {
         const totalDiscounts = allSubs.reduce((acc, curr) => acc + (curr.discountTotal || 0), 0);
         const totalTaxCollected = allSubs.reduce((acc, curr) => acc + (curr.taxTotal || 0), 0);
         const totalRemainingBalance = allSubs.reduce((acc, curr) => acc + (curr.remainingBalance || 0), 0);
+        const totalCreditsIssued = allSubs.reduce((acc, curr) => acc + (curr.creditsEarned || 0), 0);
+        const totalMembershipFees = allSubs.reduce((acc, curr) => acc + (curr.membershipFee || 0), 0);
 
         const recentSubs = await Subscription.find().sort({ createdAt: -1 }).limit(5).populate('customer').populate('plan');
 
         res.json({
             totalCustomers,
             newCustomersToday,
-            activeSubs,
+            activeSubs: activeSubsCount,
             totalPlans,
             pendingPayments,
             totalRevenue,
@@ -559,7 +624,10 @@ app.get('/api/reports', async (req, res) => {
             totalDiscounts,
             totalTaxCollected,
             totalRemainingBalance,
-            recentSubs
+            totalCreditsIssued,
+            totalMembershipFees,
+            recentSubs,
+            todayAppointments
         });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });

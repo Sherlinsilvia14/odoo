@@ -25,6 +25,8 @@ const SubscriptionSchema = new mongoose.Schema({
     planAmount: { type: Number, default: 0 },
     serviceCost: { type: Number, default: 0 },
     remainingBalance: { type: Number, default: 0 },
+    creditsEarned: { type: Number, default: 0 },
+    membershipFee: { type: Number, default: 0 },
     totalAmount: { type: Number, required: true },
 
     notes: String

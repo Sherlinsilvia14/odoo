@@ -63,9 +63,20 @@ const Subscriptions = ({ customerId, role }) => {
         }
     };
 
+    const getPlanCredits = (interval) => {
+        switch (interval) {
+            case 'Monthly': return 5;
+            case 'Quarterly': return 10;
+            case 'Half-Yearly': return 15;
+            case 'Yearly': return 10;
+            default: return 0;
+        }
+    };
+
     useEffect(() => {
         if (formData.plan) {
             const plan = plans.find(p => p._id === formData.plan);
+            const customer = customers.find(c => c._id === formData.customer);
             if (!plan) return;
 
             // 1. Plan Amount (Base Budget)
@@ -81,19 +92,23 @@ const Subscriptions = ({ customerId, role }) => {
             // 3. Discount (Based on Plan)
             const planDiscount = getPlanDiscount(plan.billingInterval);
 
-            // 4. Taxable Amount (Service Cost - Discount)
-            // Logic: Discount applies to the Service Cost, not the Plan Price directly in this context (per example)
+            // 4. Credits (Based on Plan)
+            const earnedCredits = getPlanCredits(plan.billingInterval);
+
+            // 5. Membership Fee (First-time only)
+            const membershipFee = (customer && customer.isFirstTimeUser) ? 50 : 0;
+
+            // 6. Taxable Amount (Service Cost - Discount)
             const taxableAmount = Math.max(0, serviceTotal - planDiscount);
 
-            // 5. GST (18% on Taxable Amount)
+            // 7. GST (18% on Taxable Amount)
             const gst = Math.round(taxableAmount * 0.18);
 
-            // 6. Final Payable (for the service transaction)
-            const finalServicePayable = taxableAmount + gst;
+            // 8. Final Payable
+            const finalPayable = taxableAmount + gst + membershipFee;
 
-            // 7. Remaining Balance (Plan Amount - Final Service Pay)
-            // This implies the Plan Price acts as a wallet/credit
-            const balance = planPrice - finalServicePayable;
+            // 9. Remaining Balance (Plan Amount - Final Service Pay)
+            const balance = planPrice - finalPayable;
 
             // Expiry
             let expiry = new Date(formData.startDate);
@@ -108,12 +123,14 @@ const Subscriptions = ({ customerId, role }) => {
                 serviceCost: serviceTotal,
                 discountAmount: planDiscount,
                 taxAmount: gst,
-                totalAmount: finalServicePayable,
+                totalAmount: finalPayable,
                 remainingBalance: balance,
+                creditsEarned: earnedCredits,
+                membershipFee: membershipFee,
                 endDate: expiry.toISOString().split('T')[0]
             }));
         }
-    }, [formData.plan, formData.selectedServices, formData.startDate, plans, products]); // Removing unnecessary deps
+    }, [formData.plan, formData.customer, formData.selectedServices, formData.startDate, plans, products, customers]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -217,6 +234,7 @@ const Subscriptions = ({ customerId, role }) => {
                                 {!customerId && <th>Customer</th>}
                                 <th>Plan Details</th>
                                 <th>Services</th>
+                                <th>Credits</th>
                                 <th>Billing Summary</th>
                                 <th>Status</th>
                                 {!customerId ? <th>Actions</th> : <th>Details</th>}
@@ -240,6 +258,10 @@ const Subscriptions = ({ customerId, role }) => {
                                     <td>
                                         <div style={{ fontSize: '0.8rem' }}>Cost: ₹{s.serviceCost || 0}</div>
                                         <div style={{ fontSize: '0.7rem', color: '#666' }}>{s.items?.length || 0} Services</div>
+                                    </td>
+                                    <td>
+                                        <div style={{ fontWeight: 600, color: 'var(--primary-dark)' }}>+{s.creditsEarned || 0}</div>
+                                        <div style={{ fontSize: '0.7rem', color: '#666' }}>Credits</div>
                                     </td>
                                     <td>
                                         <div style={{ fontSize: '0.85rem' }}>
@@ -317,8 +339,9 @@ const Subscriptions = ({ customerId, role }) => {
                                 {selectedPlan && (
                                     <div style={{ marginTop: '0.5rem', padding: '0.8rem', background: '#fffbeb', borderRadius: '6px', fontSize: '0.85rem', border: '1px solid #fde68a' }}>
                                         <div style={{ fontWeight: 600 }}>{selectedPlan.name}</div>
-                                        <div style={{ color: '#92400e' }}>
-                                            Price: ₹{selectedPlan.price} | Benefit: ₹{getPlanDiscount(selectedPlan.billingInterval)} Off on Services
+                                        <div style={{ color: '#92400e', display: 'flex', justifyContent: 'space-between' }}>
+                                            <span>Price: ₹{selectedPlan.price} | Benefit: ₹{getPlanDiscount(selectedPlan.billingInterval)} Off</span>
+                                            <span style={{ fontWeight: 'bold' }}>+{getPlanCredits(selectedPlan.billingInterval)} Credits</span>
                                         </div>
                                     </div>
                                 )}
@@ -363,18 +386,32 @@ const Subscriptions = ({ customerId, role }) => {
                                             <span>Discount Applied:</span>
                                             <span>-₹{formData.discountAmount}</span>
                                         </div>
+                                        {formData.membershipFee > 0 && (
+                                            <div className="flex justify-between" style={{ color: 'var(--primary-dark)' }}>
+                                                <span>First-time Membership Fee:</span>
+                                                <span>₹{formData.membershipFee}</span>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between">
                                             <span style={{ color: '#666' }}>Tax (GST 18%):</span>
                                             <span>₹{formData.taxAmount}</span>
                                         </div>
                                         <div className="flex justify-between" style={{ borderTop: '1px solid #e5e7eb', paddingTop: '8px', marginTop: '4px' }}>
-                                            <span style={{ fontWeight: 600, color: 'var(--primary-dark)' }}>Final Paid Amount:</span>
+                                            <span style={{ fontWeight: 600, color: 'var(--primary-dark)' }}>Final Payable Amount:</span>
                                             <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'var(--primary-dark)' }}>₹{formData.totalAmount}</span>
                                         </div>
                                         <div className="flex justify-between" style={{ background: '#ecfdf5', padding: '8px', borderRadius: '6px', marginTop: '4px' }}>
-                                            <span style={{ fontWeight: 600, color: '#065f46' }}>Remaining Balance:</span>
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ fontWeight: 600, color: '#065f46' }}>Remaining Balance:</span>
+                                                <span style={{ fontSize: '0.75rem', color: '#065f46' }}>Plan Credits: +{formData.creditsEarned}</span>
+                                            </div>
                                             <span style={{ fontWeight: 'bold', color: formData.remainingBalance < 0 ? '#dc2626' : '#059669' }}>₹{formData.remainingBalance}</span>
                                         </div>
+                                        {selectedCustomer?.totalCredits >= 30 && (
+                                            <div style={{ background: '#dcfce7', color: '#166534', padding: '10px', borderRadius: '8px', marginTop: '10px', textAlign: 'center', fontWeight: 'bold', border: '1px solid #bbf7d0' }}>
+                                                🎉 Congratulations! You’ve earned a free service.
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
