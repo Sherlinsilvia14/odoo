@@ -13,6 +13,7 @@ const ProductSchema = new mongoose.Schema({
         value: String,
         extraPrice: Number
     }],
+    image: String,
     isActive: { type: Boolean, default: true }
 }, { timestamps: true });
 

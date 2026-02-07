@@ -12,6 +12,8 @@ const InvoiceSchema = new mongoose.Schema({
     }],
     subtotal: Number,
     taxTotal: Number,
+    discountTotal: { type: Number, default: 0 },
+    remainingBalance: { type: Number, default: 0 },
     total: { type: Number, required: true },
     status: { type: String, enum: ['Draft', 'Confirmed', 'Paid', 'Cancelled'], default: 'Draft' },
     dueDate: Date,

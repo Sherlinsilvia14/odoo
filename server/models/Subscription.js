@@ -5,7 +5,7 @@ const SubscriptionSchema = new mongoose.Schema({
     customer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     plan: { type: mongoose.Schema.Types.ObjectId, ref: 'Plan' }, // Optional if custom
     startDate: { type: Date, default: Date.now },
-    expirationDate: Date,
+    endDate: Date,
     paymentTerms: { type: String, default: 'Immediate' },
     status: { type: String, enum: ['Draft', 'Quotation', 'Confirmed', 'Active', 'Closed'], default: 'Draft' }, // Added Quotation status flow
 
@@ -20,8 +20,11 @@ const SubscriptionSchema = new mongoose.Schema({
     }],
 
     subtotal: Number,
-    taxTotal: Number,
-    discountTotal: Number,
+    taxTotal: { type: Number, default: 0 },
+    discountTotal: { type: Number, default: 0 },
+    planAmount: { type: Number, default: 0 },
+    serviceCost: { type: Number, default: 0 },
+    remainingBalance: { type: Number, default: 0 },
     totalAmount: { type: Number, required: true },
 
     notes: String

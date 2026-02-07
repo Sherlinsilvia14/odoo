@@ -5,6 +5,7 @@ import { ChevronLeft, User, Shield, Briefcase, Check } from 'lucide-react';
 const Login = () => {
     const navigate = useNavigate();
     const [role, setRole] = useState(null);
+    const [subRole, setSubRole] = useState('Staff'); // New state for staff types
     const [formData, setFormData] = useState({ email: '', password: '' });
     const [errors, setErrors] = useState({});
     const [touched, setTouched] = useState({}); // To track field focus for validation display
@@ -35,7 +36,10 @@ const Login = () => {
                 const res = await fetch('/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...formData, role }) // Send selected role
+                    body: JSON.stringify({
+                        ...formData,
+                        role: role === 'Internal' ? subRole : role
+                    })
                 });
 
                 const data = await res.json();
@@ -77,6 +81,9 @@ const Login = () => {
                 border: '1px solid rgba(212, 163, 115, 0.3)',
                 boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.2)'
             }}>
+                <div style={{ fontFamily: 'Playfair Display', fontSize: '2rem', fontWeight: 'bold', textAlign: 'center', marginBottom: '1.5rem', color: 'var(--text-dark)' }}>
+                    Urban<span style={{ color: 'var(--primary)' }}>Glow</span>
+                </div>
                 <Link to="/" style={{ color: '#666', display: 'flex', alignItems: 'center', marginBottom: '1.5rem', textDecoration: 'none', gap: '0.5rem', width: 'fit-content' }}>
                     <ChevronLeft size={16} /> Back to Home
                 </Link>
@@ -106,7 +113,7 @@ const Login = () => {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                             <h2 style={{ fontFamily: 'Playfair Display', fontSize: '1.8rem', margin: 0 }}>
                                 Login
-                                <span style={{ display: 'block', fontSize: '0.9rem', fontFamily: 'Inter', color: '#666', fontWeight: 400, marginTop: '0.2rem' }}>as {role}</span>
+                                <span style={{ display: 'block', fontSize: '0.9rem', fontFamily: 'Inter', color: '#666', fontWeight: 400, marginTop: '0.2rem' }}>as {role === 'Internal' ? 'Staff' : role}</span>
                             </h2>
                             <button
                                 className="btn btn-outline"
@@ -118,6 +125,24 @@ const Login = () => {
                         </div>
 
                         <form onSubmit={handleSubmit}>
+                            {role === 'Internal' && (
+                                <div className="form-group">
+                                    <label className="form-label">Select Staff Type</label>
+                                    <select
+                                        className="form-input"
+                                        value={subRole}
+                                        onChange={(e) => setSubRole(e.target.value)}
+                                        style={{ background: '#fff' }}
+                                    >
+                                        <option value="Staff">Staff</option>
+                                        <option value="Manager">Manager</option>
+                                        <option value="Stylist">Stylist</option>
+                                        <option value="Receptionist">Receptionist</option>
+                                        <option value="Internal">General Internal</option>
+                                    </select>
+                                    <p style={{ fontSize: '0.7rem', color: '#888', marginTop: '0.3rem' }}>* Select the role assigned by Admin</p>
+                                </div>
+                            )}
                             <div className="form-group">
                                 <label className="form-label">Email</label>
                                 <input

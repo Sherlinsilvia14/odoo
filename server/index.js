@@ -18,6 +18,7 @@ import Invoice from './models/Invoice.js';
 import Payment from './models/Payment.js';
 import Tax from './models/Tax.js';
 import Discount from './models/Discount.js';
+import Appointment from './models/Appointment.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,7 +52,13 @@ app.post('/api/login', async (req, res) => {
         const { email, password, role } = req.body;
         const user = await User.findOne({ email });
         if (!user || !(await bcrypt.compare(password, user.password))) return res.status(400).json({ message: 'Invalid credentials' });
-        if (role && user.role !== role) return res.status(403).json({ message: 'Role mismatch' });
+        if (role && user.role !== role) {
+            // Special case: 'Internal' in UI can match any staff sub-role
+            const staffRoles = ['Internal', 'Manager', 'Receptionist', 'Stylist', 'Staff'];
+            if (!(role === 'Internal' && staffRoles.includes(user.role))) {
+                return res.status(403).json({ message: 'Role mismatch' });
+            }
+        }
         const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET || 'secret');
         res.json({ token, user });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -190,13 +197,19 @@ app.delete('/api/taxes/:id', async (req, res) => {
 
 // --- Discounts ---
 app.get('/api/discounts', async (req, res) => {
-    const discounts = await Discount.find();
+    const discounts = await Discount.find().populate('customer').populate('plan').populate('applicableProducts');
     res.json(discounts);
 });
 app.post('/api/discounts', async (req, res) => {
     const discount = new Discount(req.body);
     await discount.save();
     res.json(discount);
+});
+app.put('/api/discounts/:id', async (req, res) => {
+    try {
+        const discount = await Discount.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(discount);
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.delete('/api/discounts/:id', async (req, res) => {
     await Discount.findByIdAndDelete(req.params.id);
@@ -206,9 +219,47 @@ app.delete('/api/discounts/:id', async (req, res) => {
 // --- Users (Customers/Internal) ---
 app.get('/api/users', async (req, res) => {
     const { role } = req.query;
-    const filter = role ? { role } : {};
+    let filter = {};
+    if (role) {
+        if (role === 'Internal') {
+            filter = { role: { $in: ['Internal', 'Manager', 'Receptionist', 'Stylist', 'Staff'] } };
+        } else {
+            filter = { role };
+        }
+    }
     const users = await User.find(filter).sort({ createdAt: -1 });
     res.json(users);
+});
+
+app.post('/api/users', async (req, res) => {
+    try {
+        const { name, email, phone, password, role } = req.body;
+        const existing = await User.findOne({ email });
+        if (existing) return res.status(400).json({ message: 'Email already exists' });
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const user = new User({
+            name,
+            email,
+            phone,
+            password: hashedPassword,
+            role: role || 'Internal'
+        });
+        await user.save();
+        res.status(201).json(user);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/users/:id/details', async (req, res) => {
+    try {
+        const subscriptions = await Subscription.find({ customer: req.params.id }).populate('plan');
+        const payments = await Payment.find({ customer: req.params.id });
+        res.json({ subscriptions, payments });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // --- Services ---
@@ -235,6 +286,14 @@ app.post('/api/plans', async (req, res) => {
     const plan = new Plan(req.body);
     await plan.save();
     res.json(plan);
+});
+app.put('/api/plans/:id', async (req, res) => {
+    const plan = await Plan.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(plan);
+});
+app.delete('/api/plans/:id', async (req, res) => {
+    await Plan.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Deleted' });
 });
 
 // --- Products ---
@@ -287,7 +346,7 @@ app.put('/api/subscriptions/:id/confirm', async (req, res) => {
         const sub = await Subscription.findById(req.params.id);
         if (!sub) return res.status(404).json({ message: 'Subscription not found' });
 
-        sub.status = 'Confirmed';
+        sub.status = 'Active';
         await sub.save();
 
         // Auto-generate Invoice
@@ -301,8 +360,10 @@ app.put('/api/subscriptions/:id/confirm', async (req, res) => {
                 unitPrice: item.unitPrice,
                 amount: item.amount
             })),
-            subtotal: sub.subtotal || sub.totalAmount, // Fallback
+            subtotal: sub.serviceCost || sub.subtotal,
             taxTotal: sub.taxTotal || 0,
+            discountTotal: sub.discountTotal || 0,
+            remainingBalance: sub.remainingBalance || 0,
             total: sub.totalAmount,
             status: 'Draft',
             dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days due
@@ -364,6 +425,47 @@ app.post('/api/payments', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- Appointments ---
+app.get('/api/appointments', async (req, res) => {
+    try {
+        const { date, stylistId, customerId } = req.query;
+        let filter = {};
+        if (date) {
+            const start = new Date(date);
+            start.setUTCHours(0, 0, 0, 0);
+            const end = new Date(date);
+            end.setUTCHours(23, 59, 59, 999);
+            filter.date = { $gte: start, $lte: end };
+        }
+        if (stylistId) filter.stylist = stylistId;
+        if (customerId) filter.customer = customerId;
+
+        console.log('Fetching appointments with filter:', filter);
+        const appointments = await Appointment.find(filter)
+            .populate('customer')
+            .populate('service')
+            .populate('stylist')
+            .sort({ date: 1, time: 1 });
+        console.log('Found appointments:', appointments.length);
+        res.json(appointments);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/appointments', async (req, res) => {
+    try {
+        const appointment = new Appointment(req.body);
+        await appointment.save();
+        res.status(201).json(appointment);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/appointments/:id', async (req, res) => {
+    try {
+        const appointment = await Appointment.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(appointment);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // --- Reports ---
 app.get('/api/reports', async (req, res) => {
     try {
@@ -386,17 +488,44 @@ app.get('/api/reports', async (req, res) => {
             return res.json({ activeSubs, totalPaid, upcomingExpiry });
         }
 
-        // Admin Reports
+        // Admin & Internal Reports
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
         const totalCustomers = await User.countDocuments({ role: 'Customer' });
+        const newCustomersToday = await User.countDocuments({ role: 'Customer', createdAt: { $gte: today } });
         const activeSubs = await Subscription.countDocuments({ status: 'Active' });
+        const totalPlans = await Plan.countDocuments();
+        const pendingPayments = await Invoice.countDocuments({ status: 'Draft' });
+
+        const todayAppointments = await Appointment.countDocuments({ date: { $gte: today, $lt: tomorrow } });
+
         const payments = await Payment.find();
         const totalRevenue = payments.reduce((acc, curr) => acc + curr.amount, 0);
+
+        const todayPayments = await Payment.find({ createdAt: { $gte: today, $lt: tomorrow } });
+        const todayRevenue = todayPayments.reduce((acc, curr) => acc + curr.amount, 0);
+
+        const allSubs = await Subscription.find();
+        const totalDiscounts = allSubs.reduce((acc, curr) => acc + (curr.discountTotal || 0), 0);
+        const totalTaxCollected = allSubs.reduce((acc, curr) => acc + (curr.taxTotal || 0), 0);
+        const totalRemainingBalance = allSubs.reduce((acc, curr) => acc + (curr.remainingBalance || 0), 0);
+
         const recentSubs = await Subscription.find().sort({ createdAt: -1 }).limit(5).populate('customer').populate('plan');
 
         res.json({
             totalCustomers,
+            newCustomersToday,
             activeSubs,
+            totalPlans,
+            pendingPayments,
             totalRevenue,
+            todayRevenue,
+            totalDiscounts,
+            totalTaxCollected,
+            totalRemainingBalance,
             recentSubs
         });
     } catch (err) { res.status(500).json({ error: err.message }); }

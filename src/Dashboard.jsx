@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, LayoutDashboard, User, Calendar, Settings, Scissors, Package, FileText, Users, BarChart, FileCheck, CreditCard, Percent, DollarSign, UserCheck } from 'lucide-react';
+import { LogOut, LayoutDashboard, User, Calendar, Settings, Scissors, Package, FileText, Users, BarChart, FileCheck, CreditCard, Percent, DollarSign, UserCheck, Clock, Bell } from 'lucide-react';
 import Products from './Products';
+import Appointments from './Appointments';
 import Plans from './Plans';
 import Services from './Services';
 import Subscriptions from './Subscriptions';
@@ -10,7 +11,6 @@ import Payments from './Payments';
 import Reports from './Reports';
 import Customers from './Customers';
 import InternalUsers from './InternalUsers';
-import Quotations from './Quotations';
 import Taxes from './Taxes';
 import Discounts from './Discounts';
 import UserProfile from './UserProfile'; // New
@@ -27,14 +27,16 @@ const Dashboard = () => {
     const [userStats, setUserStats] = useState(null);
 
     useEffect(() => {
-        if (role === 'Customer' && activeTab === 'Dashboard') {
+        if (activeTab === 'Dashboard') {
             fetchStats();
         }
     }, [activeTab, role]);
 
     const fetchStats = async () => {
-        if (!userId) return;
-        const res = await fetch(`/api/reports?customerId=${userId}`);
+        const url = role === 'Customer' ? `/api/reports?customerId=${userId}` : '/api/reports';
+        if (role === 'Customer' && !userId) return;
+
+        const res = await fetch(url);
         if (res.ok) setUserStats(await res.json());
     };
 
@@ -49,7 +51,6 @@ const Dashboard = () => {
         { label: 'Products', icon: Package },
         { label: 'Plans', icon: Calendar },
         { label: 'Subscriptions', icon: FileCheck },
-        { label: 'Quotations', icon: FileText },
         { label: 'Invoices', icon: DollarSign },
         { label: 'Payments', icon: CreditCard },
         { label: 'Customers', icon: Users },
@@ -59,17 +60,30 @@ const Dashboard = () => {
         { label: 'Reports', icon: BarChart },
     ];
 
+    const staffItems = [
+        { label: 'Dashboard', icon: LayoutDashboard },
+        { label: 'Appointments', icon: Clock },
+        { label: 'Customers', icon: Users },
+        { label: 'Subscriptions', icon: FileCheck },
+        { label: 'Invoices', icon: DollarSign },
+        { label: 'Payments', icon: CreditCard },
+        { label: 'Services', icon: Scissors },
+        { label: 'Products', icon: Package },
+        { label: 'Reports', icon: BarChart },
+    ];
+
     const customerItems = [
         { label: 'Dashboard', icon: LayoutDashboard },
         { label: 'Profile', icon: User },
-        { label: 'Services', icon: Scissors }, // View Available
+        { label: 'Appointments', icon: Clock },
+        { label: 'Services', icon: Scissors },
         { label: 'My Subscriptions', icon: FileCheck },
-        { label: 'Quotations', icon: FileText },
         { label: 'Invoices', icon: DollarSign },
         { label: 'Payments', icon: CreditCard },
     ];
 
-    const items = role === 'Admin' ? adminItems : customerItems;
+    const isStaff = ['Internal', 'Manager', 'Receptionist', 'Stylist', 'Staff'].includes(role);
+    const items = role === 'Admin' ? adminItems : (isStaff ? staffItems : customerItems);
 
     const renderContent = () => {
         // --- Customer Views ---
@@ -96,12 +110,68 @@ const Dashboard = () => {
                         </div>
                     );
                 case 'Profile': return <UserProfile user={user} />;
-                case 'Services': return <Services />; // View only is fine
+                case 'Services': return <Services readOnly={true} />;
                 case 'My Subscriptions': return <Subscriptions customerId={userId} />;
-                case 'Quotations': return <Quotations customerId={userId} />;
                 case 'Invoices': return <Invoices customerId={userId} />;
                 case 'Payments': return <Payments customerId={userId} />;
+                case 'Appointments': return <Appointments customerId={userId} />;
                 default: return <div>Coming Soon</div>;
+            }
+        }
+
+        // --- Staff / Internal Views ---
+        if (isStaff) {
+            switch (activeTab) {
+                case 'Dashboard':
+                    return (
+                        <div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+                                <div className="card">
+                                    <h3 style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Today's Appointments</h3>
+                                    <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--primary-dark)' }}>{userStats?.todayAppointments || 0}</div>
+                                </div>
+                                <div className="card">
+                                    <h3 style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Active Subscriptions</h3>
+                                    <div style={{ fontSize: '1.8rem', fontWeight: 700 }}>{userStats?.activeSubs || 0}</div>
+                                </div>
+                                <div className="card">
+                                    <h3 style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Pending Payments</h3>
+                                    <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#dc2626' }}>{userStats?.pendingPayments || 0}</div>
+                                </div>
+                                <div className="card">
+                                    <h3 style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Today's Revenue</h3>
+                                    <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#059669' }}>₹{userStats?.todayRevenue || 0}</div>
+                                </div>
+                                <div className="card">
+                                    <h3 style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem', textTransform: 'uppercase' }}>New Customers (Today)</h3>
+                                    <div style={{ fontSize: '1.8rem', fontWeight: 700 }}>{userStats?.newCustomersToday || 0}</div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-6">
+                                <div className="card">
+                                    <h3 style={{ marginBottom: '1rem', borderBottom: '1px solid #eee', paddingBottom: '0.5rem' }}>Today's Schedule</h3>
+                                    <Appointments compact />
+                                </div>
+                                <div className="card">
+                                    <h3 style={{ marginBottom: '1rem', borderBottom: '1px solid #eee', paddingBottom: '0.5rem' }}>Notifications</h3>
+                                    <div style={{ display: 'grid', gap: '0.8rem' }}>
+                                        {userStats?.pendingPayments > 0 && <div style={{ background: '#fffbeb', padding: '0.8rem', borderRadius: '6px', fontSize: '0.9rem', borderLeft: '4px solid #f59e0b' }}>⚠️ {userStats.pendingPayments} Pending payments need attention</div>}
+                                        {userStats?.todayAppointments > 0 && <div style={{ background: '#f0fdf4', padding: '0.8rem', borderRadius: '6px', fontSize: '0.9rem', borderLeft: '4px solid #22c55e' }}>📅 {userStats.todayAppointments} Appointments scheduled for today</div>}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                case 'Appointments': return <Appointments />;
+                case 'Customers': return <Customers readOnly={role !== 'Manager'} />;
+                case 'Services': return <Services readOnly />;
+                case 'Products': return <Products readOnly />;
+                case 'Subscriptions': return <Subscriptions role={role} readOnly={role === 'Stylist'} />;
+                case 'Invoices': return <Invoices readOnly={role === 'Stylist'} />;
+                case 'Payments': return <Payments />;
+                case 'Reports': return <Reports limited />;
+                default: return <div>Module Coming Soon</div>;
             }
         }
 
@@ -111,8 +181,7 @@ const Dashboard = () => {
             case 'Services': return <Services />;
             case 'Products': return <Products />;
             case 'Plans': return <Plans />;
-            case 'Subscriptions': return <Subscriptions />;
-            case 'Quotations': return <Quotations />;
+            case 'Subscriptions': return <Subscriptions role={role} />;
             case 'Invoices': return <Invoices />;
             case 'Payments': return <Payments />;
             case 'Customers': return <Customers />;
@@ -120,23 +189,25 @@ const Dashboard = () => {
             case 'Taxes': return <Taxes />;
             case 'Discounts': return <Discounts />;
             case 'Dashboard':
+                const stats = userStats || { totalCustomers: 0, activeSubs: 0, totalRevenue: 0, pendingPayments: 0 };
                 return (
                     <div className="grid grid-cols-4 gap-4">
                         <div className="card">
                             <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Total Customers</h3>
-                            <div style={{ fontSize: '2rem', fontWeight: 600 }}>124</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 600 }}>{stats.totalCustomers}</div>
                         </div>
                         <div className="card">
-                            <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Active Plans</h3>
-                            <div style={{ fontSize: '2rem', fontWeight: 600 }}>45</div>
+                            <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Active Subs</h3>
+                            <div style={{ fontSize: '2rem', fontWeight: 600 }}>{stats.activeSubs}</div>
                         </div>
                         <div className="card">
-                            <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Revenue</h3>
-                            <div style={{ fontSize: '2rem', fontWeight: 600, color: 'var(--primary-dark)' }}>₹12,450</div>
+                            <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Total Revenue</h3>
+                            <div style={{ fontSize: '2rem', fontWeight: 600, color: 'var(--primary-dark)' }}>₹{stats.totalRevenue}</div>
                         </div>
-                        <div className="card">
-                            <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Pending</h3>
-                            <div style={{ fontSize: '2rem', fontWeight: 600 }}>3</div>
+                        <div className="card" onClick={() => setActiveTab('Plans')} style={{ cursor: 'pointer' }}>
+                            <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Membership Plans</h3>
+                            <div style={{ fontSize: '2rem', fontWeight: 600, color: 'var(--primary)' }}>{stats.totalPlans || 0}</div>
+                            <div style={{ fontSize: '0.7rem', color: '#888', marginTop: '0.5rem' }}>Click to manage plans →</div>
                         </div>
                     </div>
                 );

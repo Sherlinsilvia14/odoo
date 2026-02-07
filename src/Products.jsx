@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Package, Check, X } from 'lucide-react';
 
-const Products = () => {
+const Products = ({ readOnly = false }) => {
     const [products, setProducts] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [formData, setFormData] = useState({
         name: '', description: '', type: 'Service', category: '', salesPrice: '', costPrice: '', isRecurring: false,
-        variants: []
+        image: '', variants: []
     });
     const [variant, setVariant] = useState({ attribute: '', value: '', extraPrice: '' });
 
@@ -25,7 +25,7 @@ const Products = () => {
             body: JSON.stringify(formData)
         });
         setShowModal(false);
-        setFormData({ name: '', description: '', type: 'Service', category: '', salesPrice: '', costPrice: '', isRecurring: false, variants: [] });
+        setFormData({ name: '', description: '', type: 'Service', category: '', salesPrice: '', costPrice: '', isRecurring: false, image: '', variants: [] });
         fetchProducts();
     };
 
@@ -53,9 +53,11 @@ const Products = () => {
         <div>
             <div className="flex justify-between items-center mb-6" style={{ marginBottom: '1.5rem' }}>
                 <h2 style={{ fontFamily: 'Playfair Display', fontSize: '1.8rem', margin: 0 }}>Products & Services</h2>
-                <button className="btn btn-gold" onClick={() => setShowModal(true)}>
-                    <Plus size={18} /> Add Product
-                </button>
+                {!readOnly && (
+                    <button className="btn btn-gold" onClick={() => setShowModal(true)}>
+                        <Plus size={18} /> Add Product
+                    </button>
+                )}
             </div>
 
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -63,17 +65,28 @@ const Products = () => {
                     <table className="table">
                         <thead>
                             <tr>
+                                <th style={{ width: '80px' }}>Image</th>
                                 <th>Name</th>
                                 <th>Type</th>
                                 <th>Category</th>
                                 <th>Base Price</th>
                                 <th>Variants</th>
-                                <th>Actions</th>
+                                {!readOnly && <th>Actions</th>}
                             </tr>
                         </thead>
                         <tbody>
                             {products.map(p => (
                                 <tr key={p._id}>
+                                    <td>
+                                        <div style={{ width: '50px', height: '50px', borderRadius: '8px', overflow: 'hidden', background: '#f0f0f0' }}>
+                                            <img
+                                                src={p.image || 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&q=80'}
+                                                alt={p.name}
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                onError={(e) => e.target.src = 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&q=80'}
+                                            />
+                                        </div>
+                                    </td>
                                     <td style={{ fontWeight: 500 }}>{p.name}</td>
                                     <td><span className="badge badge-active">{p.type}</span></td>
                                     <td>{p.category || '-'}</td>
@@ -89,9 +102,11 @@ const Products = () => {
                                             </div>
                                         ) : '-'}
                                     </td>
-                                    <td>
-                                        <button onClick={() => handleDelete(p._id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={16} /></button>
-                                    </td>
+                                    {!readOnly && (
+                                        <td>
+                                            <button onClick={() => handleDelete(p._id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={16} /></button>
+                                        </td>
+                                    )}
                                 </tr>
                             ))}
                         </tbody>
@@ -115,6 +130,28 @@ const Products = () => {
                                         <option>Service</option><option>Goods</option>
                                     </select>
                                 </div>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Image URL</label>
+                                <input
+                                    className="form-input"
+                                    value={formData.image}
+                                    onChange={e => setFormData({ ...formData, image: e.target.value })}
+                                    placeholder="Paste direct image link (e.g. https://site.com/oil.jpg)"
+                                />
+                                {formData.image && (
+                                    <div style={{ marginTop: '0.5rem', borderRadius: '8px', overflow: 'hidden', height: '100px', border: '1px solid #ddd', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <img
+                                            src={formData.image}
+                                            alt="Preview"
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }}
+                                            onLoad={(e) => { e.target.style.display = 'block'; e.target.nextSibling.style.display = 'none'; }}
+                                        />
+                                        <div style={{ display: 'none', color: '#dc2626', fontSize: '0.8rem' }}>⚠️ Invalid Image</div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="form-group">

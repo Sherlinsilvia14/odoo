@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit2, Search } from 'lucide-react';
 
-const Services = () => {
+const Services = ({ readOnly = false }) => {
     const [services, setServices] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [formData, setFormData] = useState({ name: '', description: '', price: '', category: 'Hair', image: '' });
@@ -34,15 +34,19 @@ const Services = () => {
     return (
         <div>
             <div className="flex justify-between items-center" style={{ marginBottom: '2rem' }}>
-                <p style={{ color: '#666' }}>Manage your salon services and pricing.</p>
-                <button className="btn btn-gold" onClick={() => setShowModal(true)}> <Plus size={18} /> Add Service</button>
+                <p style={{ color: '#666' }}>{readOnly ? 'View available salon services and pricing.' : 'Manage your salon services and pricing.'}</p>
+                {!readOnly && <button className="btn btn-gold" onClick={() => setShowModal(true)}> <Plus size={18} /> Add Service</button>}
             </div>
 
             <div className="grid grid-cols-3 gap-6">
                 {services.map(s => (
                     <div key={s._id} className="card service-card" style={{ padding: 0, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
                         <div className="service-img-container">
-                            <img src={s.image || 'https://images.unsplash.com/photo-1560066984-12186d30b71c?auto=format&fit=crop&q=80'} alt={s.name} />
+                            <img
+                                src={s.image || 'https://images.unsplash.com/photo-1560066984-12186d30b71c?auto=format&fit=crop&q=80'}
+                                alt={s.name}
+                                onError={(e) => e.target.src = 'https://images.unsplash.com/photo-1560066984-12186d30b71c?auto=format&fit=crop&q=80'}
+                            />
                             <div className="service-overlay">
                                 <span>{s.name}</span>
                             </div>
@@ -55,7 +59,7 @@ const Services = () => {
                             <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem', height: '40px', overflow: 'hidden' }}>{s.description}</p>
                             <div className="flex justify-between items-center" style={{ marginTop: 'auto' }}>
                                 <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--primary-dark)' }}>₹{s.price}</span>
-                                <button onClick={(e) => { e.stopPropagation(); handleDelete(s._id); }} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={16} /></button>
+                                {!readOnly && <button onClick={(e) => { e.stopPropagation(); handleDelete(s._id); }} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={16} /></button>}
                             </div>
                         </div>
                     </div>
@@ -68,7 +72,38 @@ const Services = () => {
                         <h3 style={{ marginBottom: '1.5rem', fontFamily: 'Playfair Display', fontSize: '1.5rem' }}>Add New Service</h3>
                         <form onSubmit={handleSubmit}>
                             <div className="form-group"><label className="form-label">Name</label><input required className="form-input" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} /></div>
-                            <div className="form-group"><label className="form-label">Image URL</label><input className="form-input" value={formData.image} onChange={e => setFormData({ ...formData, image: e.target.value })} placeholder="https://..." /></div>
+                            <div className="form-group">
+                                <label className="form-label">Image URL</label>
+                                <input
+                                    className="form-input"
+                                    value={formData.image}
+                                    onChange={e => setFormData({ ...formData, image: e.target.value })}
+                                    placeholder="Paste a direct image link (e.g., https://site.com/photo.jpg)"
+                                />
+                                <p style={{ fontSize: '0.75rem', color: '#666', marginTop: '0.3rem' }}>
+                                    Tip: Right-click an image on Google and select <b>"Copy image address"</b>.
+                                </p>
+                                {formData.image && (
+                                    <div style={{ marginTop: '0.8rem', borderRadius: '8px', overflow: 'hidden', height: '120px', border: '1px solid #ddd', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                                        <img
+                                            src={formData.image}
+                                            alt="Preview"
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            onError={(e) => {
+                                                e.target.style.display = 'none';
+                                                e.target.nextSibling.style.display = 'block';
+                                            }}
+                                            onLoad={(e) => {
+                                                e.target.style.display = 'block';
+                                                e.target.nextSibling.style.display = 'none';
+                                            }}
+                                        />
+                                        <div style={{ display: 'none', textAlign: 'center', padding: '1rem', color: '#dc2626', fontSize: '0.85rem' }}>
+                                            ⚠️ This URL is not a direct image.<br />Try another link.
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                             <div className="flex gap-4">
                                 <div className="form-group" style={{ flex: 1 }}><label className="form-label">Price (₹)</label><input required type="number" className="form-input" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} /></div>
                                 <div className="form-group" style={{ flex: 1 }}><label className="form-label">Category</label>

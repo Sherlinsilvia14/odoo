@@ -2,8 +2,9 @@ import mongoose from 'mongoose';
 
 const PlanSchema = new mongoose.Schema({
     name: { type: String, required: true },
+    planType: { type: String, enum: ['Duration-based', 'Package-based'], default: 'Duration-based' },
     price: { type: Number, required: true },
-    billingInterval: { type: String, enum: ['Daily', 'Weekly', 'Monthly', 'Yearly'], default: 'Monthly' },
+    billingInterval: { type: String, enum: ['Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'], default: 'Monthly' },
     minQuantity: { type: Number, default: 1 },
     startDate: Date,
     endDate: Date,
@@ -13,6 +14,7 @@ const PlanSchema = new mongoose.Schema({
         pausable: { type: Boolean, default: true },
         renewable: { type: Boolean, default: true }
     },
+    servicesIncluded: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Service' }],
     status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' }
 }, { timestamps: true });
 

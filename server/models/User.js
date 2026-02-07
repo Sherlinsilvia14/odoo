@@ -5,7 +5,7 @@ const UserSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     phone: { type: String },
     password: { type: String, required: true },
-    role: { type: String, enum: ['Admin', 'Internal', 'Customer'], default: 'Customer' },
+    role: { type: String, enum: ['Admin', 'Internal', 'Customer', 'Manager', 'Receptionist', 'Stylist', 'Staff'], default: 'Customer' },
 
     // Reset Password Fields
     otp: String,

@@ -6,7 +6,8 @@ const Customers = () => {
     const [showModal, setShowModal] = useState(false);
     const [expandedUser, setExpandedUser] = useState(null);
     const [userDetails, setUserDetails] = useState(null);
-    const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: 'Password@123', role: 'Customer' });
+    const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: '', role: 'Customer' });
+    const [error, setError] = useState('');
 
     useEffect(() => { fetchUsers(); }, []);
     const fetchUsers = async () => {
@@ -27,17 +28,30 @@ const Customers = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) });
-        setShowModal(false);
-        setFormData({ name: '', email: '', phone: '', password: 'Password@123', role: 'Customer' });
-        fetchUsers();
+        setError('');
+        try {
+            const res = await fetch('/api/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setShowModal(false);
+                setFormData({ name: '', email: '', phone: '', password: '', role: 'Customer' });
+                fetchUsers();
+            } else {
+                setError(data.message || data.error || 'Failed to add customer');
+            }
+        } catch (err) {
+            setError('Connection error. Please try again.');
+        }
     };
 
     return (
         <div>
             <div className="flex justify-between items-center mb-6" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                 <h2 style={{ fontFamily: 'Playfair Display', fontSize: '1.8rem' }}>Customers</h2>
-                <button className="btn btn-gold" onClick={() => setShowModal(true)}><Plus size={16} /> Add Customer</button>
             </div>
 
             <div className="card">
@@ -105,23 +119,6 @@ const Customers = () => {
                 </table>
             </div>
 
-            {showModal && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100 }}>
-                    <div className="card" style={{ width: '400px', background: 'white', padding: '2rem' }}>
-                        <h3>Add Customer</h3>
-                        <form onSubmit={handleSubmit} style={{ marginTop: '1rem' }}>
-                            <div className="form-group"><label>Name</label><input required className="form-input" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} /></div>
-                            <div className="form-group"><label>Email</label><input required type="email" className="form-input" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} /></div>
-                            <div className="form-group"><label>Phone</label><input required className="form-input" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} /></div>
-                            <div className="form-group"><label>Default Password</label><input type="text" className="form-input" value={formData.password} readOnly /></div>
-                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                                <button type="button" className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
-                                <button type="submit" className="btn btn-gold">Save</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

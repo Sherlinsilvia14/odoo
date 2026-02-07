@@ -47,15 +47,20 @@ const Invoices = ({ customerId }) => {
                     <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>No invoices found.</div>
                 ) : (
                     <table className="table">
-                        <thead><tr><th>Invoice #</th>{!customerId && <th>Customer</th>}<th>Date</th><th>Status</th><th>Total</th>{customerId && <th>Action</th>}</tr></thead>
+                        <thead><tr><th>Invoice #</th>{!customerId && <th>Customer</th>}<th>Date</th><th>Breakdown</th><th>Status</th><th>Total</th>{customerId && <th>Action</th>}</tr></thead>
                         <tbody>
                             {invoices.map(inv => (
                                 <tr key={inv._id}>
                                     <td>{inv.invoiceNumber}</td>
                                     {!customerId && <td>{inv.customer?.name}</td>}
                                     <td>{new Date(inv.createdAt).toLocaleDateString()}</td>
+                                    <td>
+                                        <div className="flex justify-between" style={{ fontSize: '0.8rem' }}><span>Disc:</span><span style={{ color: '#059669' }}>-₹{inv.discountTotal || 0}</span></div>
+                                        <div className="flex justify-between" style={{ fontSize: '0.8rem' }}><span>Tax:</span><span>₹{inv.taxTotal || 0}</span></div>
+                                        <div className="flex justify-between" style={{ fontSize: '0.8rem', fontWeight: 600 }}><span>Bal:</span><span style={{ color: inv.remainingBalance < 0 ? '#dc2626' : '#059669' }}>₹{inv.remainingBalance || 0}</span></div>
+                                    </td>
                                     <td><span className={`badge ${inv.status === 'Paid' ? 'badge-active' : 'badge-warning'}`}>{inv.status}</span></td>
-                                    <td>₹{inv.total}</td>
+                                    <td style={{ fontWeight: 'bold' }}>₹{inv.total}</td>
                                     {customerId && (
                                         <td>
                                             {inv.status !== 'Paid' && (
