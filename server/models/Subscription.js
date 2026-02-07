@@ -28,6 +28,8 @@ const SubscriptionSchema = new mongoose.Schema({
     creditsEarned: { type: Number, default: 0 },
     membershipFee: { type: Number, default: 0 },
     totalAmount: { type: Number, required: true },
+    status: { type: String, enum: ['Draft', 'Confirmed', 'Active', 'Expired', 'Closed'], default: 'Draft' },
+    expiryNotificationSent: { type: Boolean, default: false },
 
     notes: String
 }, { timestamps: true });

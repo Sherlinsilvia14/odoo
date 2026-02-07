@@ -19,6 +19,7 @@ import Payment from './models/Payment.js';
 import Tax from './models/Tax.js';
 import Discount from './models/Discount.js';
 import Appointment from './models/Appointment.js';
+import Notification from './models/Notification.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -629,6 +630,81 @@ app.get('/api/reports', async (req, res) => {
             recentSubs,
             todayAppointments
         });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- Expiry Notifications Logic ---
+const checkExpiringSubscriptions = async () => {
+    try {
+        const threeDaysFromNow = new Date();
+        threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
+        threeDaysFromNow.setHours(0, 0, 0, 0);
+
+        const nextDay = new Date(threeDaysFromNow);
+        nextDay.setDate(nextDay.getDate() + 1);
+
+        const subscriptions = await Subscription.find({
+            status: 'Active',
+            endDate: { $gte: threeDaysFromNow, $lt: nextDay },
+            expiryNotificationSent: false
+        }).populate('customer');
+
+        console.log(`[ExpiryCheck] Found ${subscriptions.length} subscriptions expiring in 3 days.`);
+
+        for (const sub of subscriptions) {
+            const user = sub.customer;
+            if (!user || !user.phone) continue;
+
+            const message = `UrbanGlow Reminder: Your subscription will expire in 3 days. Renew now to continue enjoying your benefits. – UrbanGlow Salon`;
+
+            // Log the notification
+            const notification = new Notification({
+                customer: user._id,
+                type: 'Expiry Warning',
+                message,
+                recipientPhone: user.phone,
+                status: 'Sent' // Mocking "Sent" status
+            });
+            await notification.save();
+
+            // Mark sub as notified
+            sub.expiryNotificationSent = true;
+            await sub.save();
+
+            console.log(`[ExpiryCheck] Notified ${user.name} (${user.phone}) for sub ${sub._id}`);
+        }
+    } catch (err) {
+        console.error('[ExpiryCheck] Error:', err.message);
+    }
+};
+
+// Check every 12 hours (could be daily, but 12h ensures it's caught)
+setInterval(checkExpiringSubscriptions, 12 * 60 * 60 * 1000);
+// Run once on startup
+setTimeout(checkExpiringSubscriptions, 5000);
+
+app.get('/api/notifications', async (req, res) => {
+    try {
+        const { customerId } = req.query;
+        let query = {};
+        if (customerId) query.customer = customerId;
+
+        const notifications = await Notification.find(query).sort({ sentAt: -1 }).populate('customer');
+        res.json(notifications);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/subscriptions/upcoming-expiry', async (req, res) => {
+    try {
+        const soon = new Date();
+        soon.setDate(soon.getDate() + 7); // Show everything expiring in next 7 days
+
+        const expiries = await Subscription.find({
+            status: 'Active',
+            endDate: { $lte: soon }
+        }).populate('customer').populate('plan');
+
+        res.json(expiries);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

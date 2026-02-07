@@ -25,19 +25,40 @@ const Dashboard = () => {
 
     const [activeTab, setActiveTab] = useState('Dashboard');
     const [userStats, setUserStats] = useState(null);
+    const [upcomingExpiries, setUpcomingExpiries] = useState([]);
+    const [notifications, setNotifications] = useState([]);
 
     useEffect(() => {
         if (activeTab === 'Dashboard') {
             fetchStats();
         }
-    }, [activeTab, role]);
+    }, [activeTab, role, userId]); // Added userId to dependency array
 
     const fetchStats = async () => {
-        const url = role === 'Customer' ? `/api/reports?customerId=${userId}` : '/api/reports';
-        if (role === 'Customer' && !userId) return;
+        try {
+            const url = role === 'Customer' ? `/api/reports?customerId=${userId}` : '/api/reports';
+            if (role === 'Customer' && !userId) return;
 
-        const res = await fetch(url);
-        if (res.ok) setUserStats(await res.json());
+            const res = await fetch(url);
+            if (res.ok) {
+                const data = await res.json();
+                setUserStats(data);
+            }
+
+            // Also fetch upcoming expiries if admin/staff
+            const isStaff = ['Internal', 'Manager', 'Receptionist', 'Stylist', 'Staff'].includes(role);
+            if (role === 'Admin' || isStaff) {
+                const expRes = await fetch('/api/subscriptions/upcoming-expiry');
+                if (expRes.ok) setUpcomingExpiries(await expRes.json());
+            }
+
+            // Fetch notifications
+            const notifUrl = role === 'Customer' ? `/api/notifications?customerId=${userId}` : '/api/notifications';
+            const notifRes = await fetch(notifUrl);
+            if (notifRes.ok) setNotifications(await notifRes.json());
+        } catch (err) {
+            console.error('Fetch error:', err);
+        }
     };
 
     const handleLogout = () => {
@@ -80,6 +101,7 @@ const Dashboard = () => {
         { label: 'My Subscriptions', icon: FileCheck },
         { label: 'Invoices', icon: DollarSign },
         { label: 'Payments', icon: CreditCard },
+        { label: 'Notifications', icon: Bell },
     ];
 
     const isStaff = ['Internal', 'Manager', 'Receptionist', 'Stylist', 'Staff'].includes(role);
@@ -116,6 +138,25 @@ const Dashboard = () => {
                 case 'Invoices': return <Invoices customerId={userId} />;
                 case 'Payments': return <Payments customerId={userId} />;
                 case 'Appointments': return <Appointments customerId={userId} />;
+                case 'Notifications':
+                    return (
+                        <div className="card">
+                            <h2 style={{ fontFamily: 'Playfair Display', fontSize: '1.8rem', marginBottom: '1.5rem' }}>Notification History</h2>
+                            <div style={{ display: 'grid', gap: '1rem' }}>
+                                {notifications.map(n => (
+                                    <div key={n._id} style={{ background: 'white', padding: '1rem', borderRadius: '8px', border: '1px solid #eee' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                            <span style={{ fontWeight: 600, color: 'var(--primary-dark)' }}>{n.type}</span>
+                                            <span style={{ fontSize: '0.8rem', color: '#999' }}>{new Date(n.sentAt).toLocaleString()}</span>
+                                        </div>
+                                        <div style={{ color: '#333' }}>{n.message}</div>
+                                        <div style={{ fontSize: '0.75rem', marginTop: '0.5rem', color: '#666' }}>Sent to: {n.recipientPhone}</div>
+                                    </div>
+                                ))}
+                                {notifications.length === 0 && <div className="p-8 text-center text-gray-400">No notifications received yet.</div>}
+                            </div>
+                        </div>
+                    );
                 default: return <div>Coming Soon</div>;
             }
         }
@@ -159,10 +200,34 @@ const Dashboard = () => {
                                     <Appointments compact />
                                 </div>
                                 <div className="card">
-                                    <h3 style={{ marginBottom: '1rem', borderBottom: '1px solid #eee', paddingBottom: '0.5rem' }}>Notifications</h3>
-                                    <div style={{ display: 'grid', gap: '0.8rem' }}>
-                                        {userStats?.pendingPayments > 0 && <div style={{ background: '#fffbeb', padding: '0.8rem', borderRadius: '6px', fontSize: '0.9rem', borderLeft: '4px solid #f59e0b' }}>⚠️ {userStats.pendingPayments} Pending payments need attention</div>}
-                                        {userStats?.todayAppointments > 0 && <div style={{ background: '#f0fdf4', padding: '0.8rem', borderRadius: '6px', fontSize: '0.9rem', borderLeft: '4px solid #22c55e' }}>📅 {userStats.todayAppointments} Appointments scheduled for today</div>}
+                                    <h3 style={{ marginBottom: '1rem', borderBottom: '1px solid #eee', paddingBottom: '0.5rem' }}>Expiry Alerts & System Logs</h3>
+                                    <div style={{ display: 'grid', gap: '0.8rem', maxHeight: '300px', overflowY: 'auto' }}>
+                                        {upcomingExpiries.slice(0, 5).map(sub => (
+                                            <div key={sub._id} style={{ background: '#fff7ed', padding: '0.8rem', borderRadius: '6px', fontSize: '0.85rem', borderLeft: '4px solid #f97316' }}>
+                                                <div style={{ fontWeight: 600 }}>{sub.customer?.name} - {sub.plan?.name}</div>
+                                                <div style={{ color: '#666' }}>Expires on: {new Date(sub.endDate).toLocaleDateString()}</div>
+                                                <div style={{ fontSize: '0.75rem', marginTop: '0.3rem', color: sub.expiryNotificationSent ? '#059669' : '#b91c1c' }}>
+                                                    {sub.expiryNotificationSent ? '✓ SMS Warning Sent' : '⌛ SMS Warning Pending (Runs daily)'}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {upcomingExpiries.length === 0 && <div className="text-gray-400 text-sm">No upcoming expiries in the next 7 days.</div>}
+                                    </div>
+                                </div>
+                                <div className="card">
+                                    <h3 style={{ marginBottom: '1rem', borderBottom: '1px solid #eee', paddingBottom: '0.5rem' }}>Notification History</h3>
+                                    <div style={{ display: 'grid', gap: '0.8rem', maxHeight: '300px', overflowY: 'auto' }}>
+                                        {notifications.slice(0, 5).map(n => (
+                                            <div key={n._id} style={{ padding: '0.6rem', borderBottom: '1px solid #f5f5f5', fontSize: '0.85rem' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                    <span style={{ fontWeight: 600 }}>{n.type}</span>
+                                                    <span style={{ fontSize: '0.7rem', color: '#999' }}>{new Date(n.sentAt).toLocaleString()}</span>
+                                                </div>
+                                                <div style={{ color: '#444' }}>{n.message}</div>
+                                                <div style={{ fontSize: '0.7rem', color: '#666' }}>Sent to: {n.recipientPhone}</div>
+                                            </div>
+                                        ))}
+                                        {notifications.length === 0 && <div className="text-gray-400 text-sm">No notification logs found.</div>}
                                     </div>
                                 </div>
                             </div>
@@ -176,6 +241,25 @@ const Dashboard = () => {
                 case 'Invoices': return <Invoices readOnly={role === 'Stylist'} />;
                 case 'Payments': return <Payments />;
                 case 'Reports': return <Reports limited />;
+                case 'Notifications':
+                    return (
+                        <div className="card">
+                            <h2 style={{ fontFamily: 'Playfair Display', fontSize: '1.8rem', marginBottom: '1.5rem' }}>System Notification Logs</h2>
+                            <div style={{ display: 'grid', gap: '1rem' }}>
+                                {notifications.map(n => (
+                                    <div key={n._id} style={{ background: 'white', padding: '1rem', borderRadius: '8px', border: '1px solid #eee' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                            <span style={{ fontWeight: 600 }}>{n.customer?.name} - {n.type}</span>
+                                            <span style={{ fontSize: '0.8rem', color: '#999' }}>{new Date(n.sentAt).toLocaleString()}</span>
+                                        </div>
+                                        <div style={{ color: '#444' }}>{n.message}</div>
+                                        <div style={{ fontSize: '0.75rem', marginTop: '0.5rem', color: 'var(--primary-dark)' }}>Sent to: {n.recipientPhone}</div>
+                                    </div>
+                                ))}
+                                {notifications.length === 0 && <div className="p-8 text-center text-gray-400">No notifications sent yet.</div>}
+                            </div>
+                        </div>
+                    );
                 default: return <div>Module Coming Soon</div>;
             }
         }
@@ -196,23 +280,82 @@ const Dashboard = () => {
             case 'Dashboard':
                 const stats = userStats || { totalCustomers: 0, activeSubs: 0, totalRevenue: 0, pendingPayments: 0 };
                 return (
-                    <div className="grid grid-cols-4 gap-4">
-                        <div className="card">
-                            <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Total Customers</h3>
-                            <div style={{ fontSize: '2rem', fontWeight: 600 }}>{stats.totalCustomers}</div>
+                    <div>
+                        <div className="grid grid-cols-4 gap-4">
+                            <div className="card">
+                                <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Total Customers</h3>
+                                <div style={{ fontSize: '2rem', fontWeight: 600 }}>{stats.totalCustomers}</div>
+                            </div>
+                            <div className="card">
+                                <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Active Subs</h3>
+                                <div style={{ fontSize: '2rem', fontWeight: 600 }}>{stats.activeSubs}</div>
+                            </div>
+                            <div className="card">
+                                <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Total Revenue</h3>
+                                <div style={{ fontSize: '2rem', fontWeight: 600, color: 'var(--primary-dark)' }}>₹{stats.totalRevenue}</div>
+                            </div>
+                            <div className="card" onClick={() => setActiveTab('Plans')} style={{ cursor: 'pointer' }}>
+                                <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Membership Plans</h3>
+                                <div style={{ fontSize: '2rem', fontWeight: 600, color: 'var(--primary)' }}>{stats.totalPlans || 0}</div>
+                                <div style={{ fontSize: '0.7rem', color: '#888', marginTop: '0.5rem' }}>Click to manage plans →</div>
+                            </div>
                         </div>
-                        <div className="card">
-                            <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Active Subs</h3>
-                            <div style={{ fontSize: '2rem', fontWeight: 600 }}>{stats.activeSubs}</div>
-                        </div>
-                        <div className="card">
-                            <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Total Revenue</h3>
-                            <div style={{ fontSize: '2rem', fontWeight: 600, color: 'var(--primary-dark)' }}>₹{stats.totalRevenue}</div>
-                        </div>
-                        <div className="card" onClick={() => setActiveTab('Plans')} style={{ cursor: 'pointer' }}>
-                            <h3 style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Membership Plans</h3>
-                            <div style={{ fontSize: '2rem', fontWeight: 600, color: 'var(--primary)' }}>{stats.totalPlans || 0}</div>
-                            <div style={{ fontSize: '0.7rem', color: '#888', marginTop: '0.5rem' }}>Click to manage plans →</div>
+                        <div className="grid grid-cols-2 gap-6 mt-6">
+                            <div className="card">
+                                <h3 style={{ marginBottom: '1rem', borderBottom: '1px solid #eee', paddingBottom: '0.5rem' }}>Upcoming Subscription Expiries</h3>
+                                <div style={{ overflowX: 'auto' }}>
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="text-left border-bottom">
+                                                <th className="p-2">Customer</th>
+                                                <th className="p-2">Plan</th>
+                                                <th className="p-2">Expiry Date</th>
+                                                <th className="p-2">Notification</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {upcomingExpiries.map(sub => (
+                                                <tr key={sub._id} className="border-bottom hover:bg-gray-50">
+                                                    <td className="p-2">
+                                                        <div>{sub.customer?.name}</div>
+                                                        <div style={{ fontSize: '0.7rem', color: '#999' }}>{sub.customer?.phone}</div>
+                                                    </td>
+                                                    <td className="p-2">{sub.plan?.name}</td>
+                                                    <td className="p-2">{new Date(sub.endDate).toLocaleDateString()}</td>
+                                                    <td className="p-2">
+                                                        <span style={{
+                                                            fontSize: '0.7rem',
+                                                            padding: '2px 6px',
+                                                            borderRadius: '4px',
+                                                            backgroundColor: sub.expiryNotificationSent ? '#dcfce7' : '#fee2e2',
+                                                            color: sub.expiryNotificationSent ? '#166534' : '#991b1b'
+                                                        }}>
+                                                            {sub.expiryNotificationSent ? 'Sent' : 'Pending'}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {upcomingExpiries.length === 0 && <tr><td colSpan="4" className="p-4 text-center text-gray-400">No upcoming expiries</td></tr>}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div className="card">
+                                <h3 style={{ marginBottom: '1rem', borderBottom: '1px solid #eee', paddingBottom: '0.5rem' }}>Global Notification Logs</h3>
+                                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                                    {notifications.map(n => (
+                                        <div key={n._id} style={{ padding: '0.6rem', borderBottom: '1px solid #f5f5f5', fontSize: '0.85rem' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
+                                                <span style={{ fontWeight: 600 }}>{n.customer?.name} - {n.type}</span>
+                                                <span style={{ fontSize: '0.7rem', color: '#999' }}>{new Date(n.sentAt).toLocaleString()}</span>
+                                            </div>
+                                            <div style={{ color: '#666' }}>{n.message}</div>
+                                            <div style={{ fontSize: '0.75rem', marginTop: '0.2rem', color: 'var(--primary-dark)' }}>Sent to: {n.recipientPhone}</div>
+                                        </div>
+                                    ))}
+                                    {notifications.length === 0 && <div className="p-4 text-center text-gray-400">No notifications sent yet.</div>}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 );
