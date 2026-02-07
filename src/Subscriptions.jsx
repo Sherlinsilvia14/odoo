@@ -52,63 +52,50 @@ const Subscriptions = ({ customerId, role }) => {
         if (res.ok) setSubs(await res.json());
     };
 
+    // Helper for plan discounts
+    const getPlanDiscount = (interval) => {
+        switch (interval) {
+            case 'Monthly': return 100;
+            case 'Quarterly': return 200;
+            case 'Half-Yearly': return 300;
+            case 'Yearly': return 400;
+            default: return 0;
+        }
+    };
+
     useEffect(() => {
         if (formData.plan) {
             const plan = plans.find(p => p._id === formData.plan);
+            if (!plan) return;
 
-            // 1. Find the best discount rule
-            const bestRule = discountRules.find(r =>
-                r.isActive && r.customer === formData.customer && r.plan === formData.plan
-            ) || discountRules.find(r =>
-                r.isActive && r.customer === formData.customer &&
-                (r.applicablePlanInterval === plan.billingInterval || r.applicablePlanInterval === 'All')
-            ) || discountRules.find(r =>
-                r.isActive && !r.customer && r.plan === formData.plan
-            ) || discountRules.find(r =>
-                r.isActive && !r.customer &&
-                (r.applicablePlanInterval === plan.billingInterval || r.applicablePlanInterval === 'All')
-            );
+            // 1. Plan Amount (Base Budget)
+            const planPrice = plan.price;
 
-            // 2. Calculate service cost & specific product discounts
+            // 2. Service Cost
             let serviceTotal = 0;
-            let productDiscounts = 0;
-
             formData.selectedServices.forEach(id => {
                 const prod = products.find(p => p._id === id);
-                if (!prod) return;
-                serviceTotal += prod.salesPrice;
-
-                // If rule targets specific products
-                if (bestRule?.applicableProducts?.includes(id)) {
-                    const d = bestRule.type === 'Percentage' ? (prod.salesPrice * bestRule.value / 100) : bestRule.value;
-                    productDiscounts += d;
-                }
+                if (prod) serviceTotal += prod.salesPrice;
             });
 
-            // 3. Dynamic Tax Rule
-            const activeTax = taxRules.find(t => t.isActive && (t.applicablePlanInterval === plan.billingInterval || t.applicablePlanInterval === 'All'));
-            const taxRate = activeTax ? activeTax.percentage / 100 : (plan.billingInterval === 'Yearly' ? 0.20 : 0.10); // Default to prompt's request
+            // 3. Discount (Based on Plan)
+            const planDiscount = getPlanDiscount(plan.billingInterval);
 
-            // 4. Main Subscription Discount (if not product-specific)
-            let mainDiscount = 0;
-            if (bestRule && (!bestRule.applicableProducts || bestRule.applicableProducts.length === 0)) {
-                mainDiscount = bestRule.type === 'Percentage' ? (serviceTotal * bestRule.value / 100) : bestRule.value;
-            } else if (!bestRule) {
-                // Hardcoded defaults as fallback
-                if (plan.billingInterval === 'Monthly') mainDiscount = 100;
-                else if (plan.billingInterval === 'Quarterly') mainDiscount = 200;
-                else if (plan.billingInterval === 'Half-Yearly') mainDiscount = 300;
-                else if (plan.billingInterval === 'Yearly') mainDiscount = 400;
-            }
+            // 4. Taxable Amount (Service Cost - Discount)
+            // Logic: Discount applies to the Service Cost, not the Plan Price directly in this context (per example)
+            const taxableAmount = Math.max(0, serviceTotal - planDiscount);
 
-            const totalDiscount = Math.round(mainDiscount + productDiscounts);
-            const planPrice = plan.price || 0;
-            const payableBase = serviceTotal - totalDiscount;
-            const taxAmount = Math.round(Math.max(0, payableBase * taxRate));
-            const finalPayable = Math.max(0, payableBase + taxAmount);
-            const balance = planPrice - (payableBase > 0 ? payableBase : 0);
+            // 5. GST (18% on Taxable Amount)
+            const gst = Math.round(taxableAmount * 0.18);
 
-            // 5. Expiry calculation
+            // 6. Final Payable (for the service transaction)
+            const finalServicePayable = taxableAmount + gst;
+
+            // 7. Remaining Balance (Plan Amount - Final Service Pay)
+            // This implies the Plan Price acts as a wallet/credit
+            const balance = planPrice - finalServicePayable;
+
+            // Expiry
             let expiry = new Date(formData.startDate);
             if (plan.billingInterval === 'Monthly') expiry.setMonth(expiry.getMonth() + 1);
             else if (plan.billingInterval === 'Quarterly') expiry.setMonth(expiry.getMonth() + 3);
@@ -119,19 +106,18 @@ const Subscriptions = ({ customerId, role }) => {
                 ...prev,
                 planAmount: planPrice,
                 serviceCost: serviceTotal,
-                discountAmount: totalDiscount,
-                taxAmount: taxAmount,
-                totalAmount: finalPayable,
+                discountAmount: planDiscount,
+                taxAmount: gst,
+                totalAmount: finalServicePayable,
                 remainingBalance: balance,
                 endDate: expiry.toISOString().split('T')[0]
             }));
         }
-    }, [formData.plan, formData.selectedServices, formData.startDate, formData.customer, plans, products, discountRules, taxRules]);
+    }, [formData.plan, formData.selectedServices, formData.startDate, plans, products]); // Removing unnecessary deps
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            const selectedPlan = plans.find(p => p._id === formData.plan);
             const items = formData.selectedServices.map(id => {
                 const p = products.find(prod => prod._id === id);
                 return {
@@ -171,6 +157,7 @@ const Subscriptions = ({ customerId, role }) => {
         }
     };
 
+    // ... (Keep existing helpers like confirmSub, closeSub, toggleSelectedService)
     const confirmSub = async (id) => {
         if (window.confirm('Confirm Subscription and Generate Invoice?')) {
             const res = await fetch(`/api/subscriptions/${id}/confirm`, { method: 'PUT' });
@@ -256,13 +243,14 @@ const Subscriptions = ({ customerId, role }) => {
                                     </td>
                                     <td>
                                         <div style={{ fontSize: '0.85rem' }}>
+                                            <div className="flex justify-between" style={{ gap: '1rem' }}><span>Cost:</span><span>₹{s.serviceCost || 0}</span></div>
                                             <div className="flex justify-between" style={{ gap: '1rem' }}><span>Disc:</span><span style={{ color: '#059669' }}>-₹{s.discountTotal || 0}</span></div>
-                                            <div className="flex justify-between" style={{ gap: '1rem' }}><span>Tax:</span><span>₹{s.taxTotal || 0}</span></div>
+                                            <div className="flex justify-between" style={{ gap: '1rem' }}><span>GST:</span><span>₹{s.taxTotal || 0}</span></div>
                                             <div className="flex justify-between" style={{ fontWeight: 'bold', color: 'var(--primary-dark)', borderTop: '1px solid #eee', marginTop: '2px' }}>
-                                                <span>Paid:</span><span>₹{s.totalAmount}</span>
+                                                <span>Final Paid:</span><span>₹{s.totalAmount}</span>
                                             </div>
-                                            <div className="flex justify-between" style={{ fontSize: '0.75rem', color: s.remainingBalance < 0 ? '#dc2626' : '#059669', fontWeight: 600 }}>
-                                                <span>Bal:</span><span>₹{s.remainingBalance || 0}</span>
+                                            <div className="flex justify-between" style={{ fontSize: '0.75rem', color: s.remainingBalance < 0 ? '#dc2626' : '#059669', fontWeight: 600, borderTop: '1px solid #eee' }}>
+                                                <span>Balance:</span><span>₹{s.remainingBalance || 0}</span>
                                             </div>
                                         </div>
                                     </td>
@@ -314,35 +302,35 @@ const Subscriptions = ({ customerId, role }) => {
                                     <option value="">Choose a customer...</option>
                                     {customers.map(c => <option key={c._id} value={c._id}>{c.name} ({c.email})</option>)}
                                 </select>
-                                {selectedCustomer && (
-                                    <div style={{ marginTop: '0.5rem', padding: '0.8rem', background: '#f9fafb', borderRadius: '6px', fontSize: '0.85rem', border: '1px solid #eee' }}>
-                                        <div style={{ fontWeight: 600 }}>{selectedCustomer.name}</div>
-                                        <div style={{ color: '#666' }}>{selectedCustomer.email} | {selectedCustomer.phone}</div>
-                                    </div>
-                                )}
                             </div>
 
                             <div className="form-group">
                                 <label className="form-label">Select Membership Plan</label>
                                 <select required className="form-input" value={formData.plan} onChange={e => setFormData({ ...formData, plan: e.target.value })}>
                                     <option value="">Choose a plan...</option>
-                                    {plans.map(p => <option key={p._id} value={p._id}>{p.name} - ₹{p.price} ({p.billingInterval})</option>)}
+                                    {plans.map(p => (
+                                        <option key={p._id} value={p._id}>
+                                            {p.name} - ₹{p.price} (Disc: ₹{getPlanDiscount(p.billingInterval)})
+                                        </option>
+                                    ))}
                                 </select>
                                 {selectedPlan && (
                                     <div style={{ marginTop: '0.5rem', padding: '0.8rem', background: '#fffbeb', borderRadius: '6px', fontSize: '0.85rem', border: '1px solid #fde68a' }}>
                                         <div style={{ fontWeight: 600 }}>{selectedPlan.name}</div>
-                                        <div style={{ color: '#92400e' }}>Billing Cycle: {selectedPlan.billingInterval} | Base Price: ₹{selectedPlan.price}</div>
+                                        <div style={{ color: '#92400e' }}>
+                                            Price: ₹{selectedPlan.price} | Benefit: ₹{getPlanDiscount(selectedPlan.billingInterval)} Off on Services
+                                        </div>
                                     </div>
                                 )}
                             </div>
 
                             <div className="form-group">
                                 <label className="form-label">Add-on Services</label>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem', maxHeight: '100px', overflowY: 'auto', padding: '0.8rem', border: '1px solid #eee', borderRadius: '8px', background: '#fdfdfd' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem', maxHeight: '150px', overflowY: 'auto', padding: '0.8rem', border: '1px solid #eee', borderRadius: '8px', background: '#fdfdfd' }}>
                                     {products.map(p => (
-                                        <label key={p._id} style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer' }}>
+                                        <label key={p._id} style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', padding: '4px', borderRadius: '4px', background: formData.selectedServices.includes(p._id) ? '#fef3c7' : 'transparent' }}>
                                             <input type="checkbox" checked={formData.selectedServices.includes(p._id)} onChange={() => toggleSelectedService(p._id)} />
-                                            {p.name} (₹{p.salesPrice})
+                                            <span>{p.name} (₹{p.salesPrice})</span>
                                         </label>
                                     ))}
                                 </div>
@@ -355,23 +343,36 @@ const Subscriptions = ({ customerId, role }) => {
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Expiry Date</label>
-                                    <input type="date" className="form-input" value={formData.endDate} onChange={e => setFormData({ ...formData, endDate: e.target.value })} />
+                                    <input readOnly type="date" className="form-input" value={formData.endDate} style={{ background: '#f3f4f6' }} />
                                 </div>
                             </div>
 
                             {selectedPlan && (
-                                <div style={{ padding: '1.2rem', background: 'linear-gradient(135deg, #fff 0%, #fef8f0 100%)', borderRadius: '12px', border: '1px solid var(--primary)', marginTop: '0.5rem' }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem', fontSize: '0.85rem' }}>
-                                        <div className="flex justify-between"><span>Plan Amount:</span><span>₹{formData.planAmount}</span></div>
-                                        <div className="flex justify-between"><span>Service Cost:</span><span>₹{formData.serviceCost}</span></div>
-                                        <div className="flex justify-between" style={{ color: '#059669', fontWeight: 600 }}><span>Discount (-):</span><span>₹{formData.discountAmount}</span></div>
-                                        <div className="flex justify-between"><span>Tax (18%):</span><span>₹{formData.taxAmount}</span></div>
-                                        <div className="flex justify-between" style={{ borderTop: '1px solid #fde68a', paddingTop: '4px' }}>
-                                            <span style={{ fontWeight: 600 }}>Final Paid:</span>
-                                            <span style={{ fontWeight: 'bold', color: 'var(--primary-dark)' }}>₹{formData.totalAmount}</span>
+                                <div style={{ padding: '1.2rem', background: '#fdfbf7', borderRadius: '12px', border: '1px solid #e5e7eb', marginTop: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                    <h4 style={{ fontSize: '0.9rem', fontWeight: 'bold', marginBottom: '0.8rem', borderBottom: '1px solid #eee', paddingBottom: '0.5rem' }}>Billing Summary</h4>
+                                    <div style={{ display: 'grid', gap: '0.6rem', fontSize: '0.9rem' }}>
+                                        <div className="flex justify-between">
+                                            <span style={{ color: '#666' }}>Plan Amount (Balance):</span>
+                                            <span style={{ fontWeight: 600 }}>₹{formData.planAmount}</span>
                                         </div>
-                                        <div className="flex justify-between" style={{ borderTop: '1px solid #fde68a', paddingTop: '4px' }}>
-                                            <span style={{ fontWeight: 600 }}>Remaining Balance:</span>
+                                        <div className="flex justify-between">
+                                            <span style={{ color: '#666' }}>Service Cost:</span>
+                                            <span>₹{formData.serviceCost}</span>
+                                        </div>
+                                        <div className="flex justify-between" style={{ color: '#059669' }}>
+                                            <span>Discount Applied:</span>
+                                            <span>-₹{formData.discountAmount}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span style={{ color: '#666' }}>Tax (GST 18%):</span>
+                                            <span>₹{formData.taxAmount}</span>
+                                        </div>
+                                        <div className="flex justify-between" style={{ borderTop: '1px solid #e5e7eb', paddingTop: '8px', marginTop: '4px' }}>
+                                            <span style={{ fontWeight: 600, color: 'var(--primary-dark)' }}>Final Paid Amount:</span>
+                                            <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'var(--primary-dark)' }}>₹{formData.totalAmount}</span>
+                                        </div>
+                                        <div className="flex justify-between" style={{ background: '#ecfdf5', padding: '8px', borderRadius: '6px', marginTop: '4px' }}>
+                                            <span style={{ fontWeight: 600, color: '#065f46' }}>Remaining Balance:</span>
                                             <span style={{ fontWeight: 'bold', color: formData.remainingBalance < 0 ? '#dc2626' : '#059669' }}>₹{formData.remainingBalance}</span>
                                         </div>
                                     </div>
@@ -380,7 +381,7 @@ const Subscriptions = ({ customerId, role }) => {
 
                             <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
                                 <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => setShowModal(false)}>Cancel</button>
-                                <button type="submit" className="btn btn-gold" style={{ flex: 2 }}>Save & Confirm Order</button>
+                                <button type="submit" className="btn btn-gold" style={{ flex: 2 }}>Save & Confirm</button>
                             </div>
                         </form>
                     </div>

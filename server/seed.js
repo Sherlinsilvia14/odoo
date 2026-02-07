@@ -34,9 +34,10 @@ const products = [
 ];
 
 const plans = [
-    { name: 'Elite Salon Membership', price: 2999, billingInterval: 'Monthly', status: 'Active' },
-    { name: 'Grooming Basics', price: 999, billingInterval: 'Monthly', status: 'Active' },
-    { name: 'Wellness Year Pass', price: 25000, billingInterval: 'Yearly', status: 'Active' }
+    { name: 'Monthly Membership', price: 1199, billingInterval: 'Monthly', status: 'Active' },
+    { name: 'Quarterly Membership', price: 1799, billingInterval: 'Quarterly', status: 'Active' },
+    { name: 'Half-Yearly Membership', price: 4999, billingInterval: 'Half-Yearly', status: 'Active' },
+    { name: 'Yearly Membership', price: 9999, billingInterval: 'Yearly', status: 'Active' }
 ];
 
 const internalUsers = [
