@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard } from 'lucide-react';
+import { CreditCard, FileText, ChevronLeft } from 'lucide-react';
+import InvoiceDisplay from './InvoiceDisplay';
+import PaymentGateway from './PaymentGateway';
 
 const Invoices = ({ customerId }) => {
     const [invoices, setInvoices] = useState([]);
+    const [view, setView] = useState('list'); // list, invoice, payment
+    const [selectedInvoice, setSelectedInvoice] = useState(null);
 
     useEffect(() => { fetchInvoices(); }, [customerId]);
     const fetchInvoices = async () => {
@@ -11,31 +15,43 @@ const Invoices = ({ customerId }) => {
         if (res.ok) setInvoices(await res.json());
     };
 
-    const handlePay = async (invoice) => {
-        const amount = prompt(`Enter amount to pay for ${invoice.invoiceNumber} (Total: ₹${invoice.total})`, invoice.total);
-        if (!amount) return;
-
-        try {
-            const res = await fetch('/api/payments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    invoice: invoice._id,
-                    customer: invoice.customer?._id || customerId,
-                    amount: parseFloat(amount),
-                    method: 'Credit Card', // Mock method
-                    description: 'Online Payment'
-                })
-            });
-            if (res.ok) {
-                alert('Payment Successful!');
-                fetchInvoices();
-            }
-        } catch (err) {
-            console.error(err);
-            alert('Payment Failed');
-        }
+    const handlePayClick = (invoice) => {
+        setSelectedInvoice(invoice);
+        setView('invoice');
     };
+
+    const handleConfirmInvoice = () => {
+        setView('payment');
+    };
+
+    const handlePaymentSuccess = () => {
+        setView('list');
+        fetchInvoices();
+    };
+
+    if (view === 'invoice') {
+        return (
+            <div>
+                <button onClick={() => setView('list')} className="btn btn-outline mb-4" style={{ marginBottom: '1.5rem' }}>
+                    <ChevronLeft size={18} /> Back to List
+                </button>
+                <InvoiceDisplay
+                    invoice={selectedInvoice}
+                    onConfirm={handleConfirmInvoice}
+                />
+            </div>
+        );
+    }
+
+    if (view === 'payment') {
+        return (
+            <PaymentGateway
+                invoice={selectedInvoice}
+                onPaymentSuccess={handlePaymentSuccess}
+                onBack={() => setView('invoice')}
+            />
+        );
+    }
 
     return (
         <div>
@@ -64,7 +80,7 @@ const Invoices = ({ customerId }) => {
                                     {customerId && (
                                         <td>
                                             {inv.status !== 'Paid' && (
-                                                <button className="btn btn-gold" style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }} onClick={() => handlePay(inv)}>
+                                                <button className="btn btn-gold" style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }} onClick={() => handlePayClick(inv)}>
                                                     Pay Now
                                                 </button>
                                             )}

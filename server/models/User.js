@@ -11,7 +11,9 @@ const UserSchema = new mongoose.Schema({
     otp: String,
     otpExpires: Date,
     resetPasswordToken: String,
-    resetPasswordExpires: Date
+    resetPasswordExpires: Date,
+    balance: { type: Number, default: 0 },
+    membershipDiscount: { type: Number, default: 0 } // Percentage
 }, { timestamps: true });
 
 export default mongoose.model('User', UserSchema);
